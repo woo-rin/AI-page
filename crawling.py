@@ -18,7 +18,7 @@ def Crawling_requests():
 
     # Pandas를 이용해 '롯데' 선수만 모은 Dataframe으로 치환
     # 우선은 롯데자이언츠만 크롤링
-    df = df.loc[df['팀명']=='롯데']
+    df = df[df['팀명'].str.contains('롯데', na=False)]
     return df.to_dict(orient='records')
     
 from selenium import webdriver
