@@ -1,0 +1,131 @@
+# === Phase 3: 전처리된 데이터 시각화 ===
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import matplotlib.font_manager as fm
+import platform
+
+INPUT_FILE = 'apartment_rent_processed.csv'
+
+# ================================
+# 🔥 한글 폰트 깨짐 방지 (Windows / Mac / Linux 자동 지원)
+# ================================
+system = platform.system()
+
+if system == 'Windows':
+    plt.rc('font', family='Malgun Gothic')  # 윈도우 기본 폰트
+elif system == 'Darwin':  # macOS
+    plt.rc('font', family='AppleGothic')
+else:  # Linux (Colab 등)
+    plt.rc('font', family='NanumGothic')
+
+plt.rcParams['axes.unicode_minus'] = False  # 마이너스 기호 깨짐 방지
+
+# ================================
+
+
+def load_data():
+    print(f"'{INPUT_FILE}' 파일 로드 중...")
+    df = pd.read_csv(INPUT_FILE, encoding='utf-8', parse_dates=['계약일자'])
+    print(f"로드 완료. (총 {len(df)}건)")
+    return df
+
+
+def plot_distribution(df):
+    plt.figure(figsize=(10,5))
+    sns.countplot(data=df, x='전월세구분')
+    plt.title("전세 / 월세 데이터 비율")
+    plt.show()
+
+
+def plot_deposit_rent_distribution(df):
+    plt.figure(figsize=(10,5))
+    sns.histplot(df['보증금(만원)'], bins=50)
+    plt.title("보증금(만원) 분포")
+    plt.show()
+
+    plt.figure(figsize=(10,5))
+    sns.histplot(df[df['월세(만원)'] > 0]['월세(만원)'], bins=50)
+    plt.title("월세(만원) 분포")
+    plt.show()
+
+
+def plot_area_price_relation(df):
+    plt.figure(figsize=(10,6))
+    sns.scatterplot(data=df, x='전용면적(㎡)', y='보증금(만원)', hue='전월세구분')
+    plt.title("전용면적과 보증금의 관계")
+    plt.show()
+
+
+def plot_floor_price(df):
+    plt.figure(figsize=(10,6))
+    sns.boxplot(data=df, x='층', y='보증금(만원)')
+    plt.title("층수별 보증금 분포")
+    plt.show()
+
+
+def plot_age_relation(df):
+    plt.figure(figsize=(10,6))
+    sns.scatterplot(data=df, x='아파트연식', y='보증금(만원)', alpha=0.6)
+    plt.title("아파트 연식과 보증금 관계")
+    plt.show()
+
+
+def plot_region_avg(df):
+    plt.figure(figsize=(12,6))
+    region_mean = df.groupby('법정동')[['보증금(만원)','월세(만원)']].mean().sort_values('보증금(만원)', ascending=False).head(15)
+    region_mean.plot(kind='bar', figsize=(12,6))
+    plt.title("지역별 평균 보증금/월세 (Top 15)")
+    plt.xticks(rotation=45)
+    plt.show()
+
+
+def plot_time_series(df):
+    monthly = df.resample('M', on='계약일자')['보증금(만원)'].mean()
+    plt.figure(figsize=(12,6))
+    plt.plot(monthly.index, monthly.values)
+    plt.title("월별 평균 보증금 변화")
+    plt.xlabel("날짜")
+    plt.ylabel("보증금(만원)")
+    plt.grid(True)
+    plt.show()
+
+
+def plot_outliers(df):
+    plt.figure(figsize=(10,5))
+    sns.boxplot(data=df, y='보증금(만원)')
+    plt.title("보증금 이상치(Boxplot)")
+    plt.show()
+
+
+def visualize_all():
+    df = load_data()
+
+    print("\n[1] 전월세 비율 시각화")
+    plot_distribution(df)
+
+    print("\n[2] 보증금 / 월세 분포")
+    plot_deposit_rent_distribution(df)
+
+    print("\n[3] 전용면적–보증금 관계")
+    plot_area_price_relation(df)
+
+    print("\n[4] 층수별 보증금 박스플롯")
+    plot_floor_price(df)
+
+    print("\n[5] 아파트 연식과 보증금 관계")
+    plot_age_relation(df)
+
+    print("\n[6] 지역별 평균 보증금/월세")
+    plot_region_avg(df)
+
+    print("\n[7] 계약일자 기반 시계열 분석")
+    plot_time_series(df)
+
+    print("\n[8] 보증금 이상치 분석")
+    plot_outliers(df)
+
+
+
+if __name__ == "__main__":
+    visualize_all()
