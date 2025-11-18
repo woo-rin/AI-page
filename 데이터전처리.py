@@ -62,16 +62,21 @@ def preprocess_data(df):
     # 단계 3: 최종 컬럼 정리 및 타입 변환
     # ----------------------------------------------------
     
+    # 🌟 [버그 수정] '단지명' 컬럼이 있으면 '아파트'로 이름을 변경합니다.
+    if '단지명' in proc_df.columns:
+        proc_df = proc_df.rename(columns={'단지명': '아파트'})
+        print("  > [수정] '단지명' -> '아파트'로 컬럼명 변경")
+
     # 타입 변환 (정수형)
     proc_df['건축년도'] = proc_df['건축년도'].astype(int)
     proc_df['층'] = proc_df['층'].astype(int)
     
     # 불필요한 컬럼 제거: 파생변수를 만들거나 클리닝 과정에서 사용한 원본 컬럼을 제거합니다.
     columns_to_drop = ['년', '월', '일', '보증금액', '월세금', '해제여부', '해제사유발생일', '갱신청구권사용여부', '지번', '전용면적', '지역코드']
-    proc_df = proc_df.drop(columns=[col for col in columns_to_drop if col in proc_df.columns], errors='ignore')
+    proc_df = proc_df.drop(columns=[col for col in proc_df.columns], errors='ignore')
 
     # 최종 컬럼 순서 조정
-    final_cols = ['아파트', '법정동', '전용면적(㎡)', '층', '건축년도', '아파트연식', '전월세구분', '보증금(만원)', '월세(만원)', '계약일자']
+    final_cols = ['아파트', '법정동', '전용면경(㎡)', '층', '건축년도', '아파트연식', '전월세구분', '보증금(만원)', '월세(만원)', '계약일자']
     proc_df = proc_df.reindex(columns=[col for col in final_cols if col in proc_df.columns])
     
     print("\n--- 전처리 완료 ---")
