@@ -1,77 +1,108 @@
-import requests
 import pandas as pd
-import xml.etree.ElementTree as ET
-import time
+import numpy as np
+import random
 import os
 
-# === 설정값 ===
-# 🚨 인증키: 이전에 확인된 유효한 키를 사용합니다.
-SERVICE_KEY = "b24b18c2d2d6837e656f5ad4d6ee8de5dac06625be270c294842f3aeaafa94c6"
+# --- 설정값 ---
+NUM_ROWS = 200000
+OUTPUT_FILENAME = 'apartment_sales_raw_data.csv' # 매매 데이터용 파일명
 
-# 수집할 지역 및 기간 설정
-LAWD_CD = '11680'  # 서울 강남구
-DEAL_YMS = ['202401', '202402', '202403']  # 3개월치 데이터 수집
-
-OUTPUT_FILE = 'apartment_rent_raw_data.csv' # 파이프라인 연결을 위해 이 이름 고정
-API_URL = "https://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSDataLink/getAptRentRow"
-
-def fetch_data(deal_ym):
-    """특정 년월의 데이터를 API로 요청합니다."""
-    params = {
-        'serviceKey': SERVICE_KEY,
-        'LAWD_CD': LAWD_CD,
-        'DEAL_YMD': deal_ym
+def create_realistic_sales_data(num_rows=200000):
+    """
+    아파트 '매매' 실거래가를 모방한 데이터 생성
+    (강남구 실제 시세 및 프리미엄 로직 반영)
+    """
+    # 1. 지역 및 입지 가중치 (강남구 주요 동네)
+    districts = {
+        '압구정동': 2.5, # 재건축 대장주 (가장 비쌈)
+        '반포동': 2.3,   # 한강변 신축
+        '대치동': 2.0,   # 학군 프리미엄
+        '삼성동': 1.8,   # 개발 호재
+        '도곡동': 1.6,   # 전통 부촌
+        '역삼동': 1.3,   # 업무 지구
+        '개포동': 1.4    # 신축 대단지
     }
     
-    try:
-        # 타임아웃 10초 설정
-        response = requests.get(API_URL, params=params, timeout=10)
-        response.raise_for_status()
+    # 아파트 브랜드
+    apt_brands = ['현대', '래미안', '자이', '힐스테이트', '아이파크', '푸르지오', '더샵', 'e편한세상', '아크로', '롯데캐슬']
+    
+    data = []
+    
+    for _ in range(num_rows):
+        # 기본 정보 생성
+        dong = random.choice(list(districts.keys()))
+        brand = random.choice(apt_brands)
+        apt_name = f"{dong} {brand}"
         
-        # XML 파싱
-        root = ET.fromstring(response.content)
-        items = root.findall('.//item')
+        # 층수 (1~45층)
+        floor = random.randint(1, 45)
         
-        data_list = []
-        for item in items:
-            row = {}
-            for child in item:
-                # 태그 이름과 값을 딕셔너리에 저장
-                row[child.tag] = child.text.strip() if child.text else None
-            data_list.append(row)
+        # 전용면적 (평형대 모사: 25평, 34평, 40평, 50평)
+        # 59.9(25평), 84.9(34평), 114.5(40평대), 135.8(50평대)
+        area = random.choice([59.9, 84.9, 114.5, 135.8]) + round(random.uniform(-1, 1), 2)
+        
+        # 건축년도 (1980 ~ 2024)
+        build_year = random.randint(1980, 2024)
+        age = 2024 - build_year
+        
+        # --- 매매가 결정 로직 (단위: 만원) ---
+        
+        # 1. 기본 평당가 설정 (강남구 기준: 평당 6,000 ~ 1.2억 가정)
+        # 3.3m^2 당 가격을 랜덤하게 설정하되, 동네(districts) 가중치를 곱함
+        base_price_per_pyeong = random.randint(5000, 8000) 
+        pyeong = area / 3.3
+        
+        # 기본 가격 = 평수 * 평당가 * 동네 가중치
+        base_price = pyeong * base_price_per_pyeong * districts[dong]
+        
+        # 2. 연식에 따른 프리미엄 (U자형 곡선)
+        if age <= 5:
+            base_price *= 1.25 # 신축 프리미엄 (+25%)
+        elif age >= 30:
+            base_price *= 1.35 # 재건축 기대감 프리미엄 (+35%)
+        elif age >= 15:
+            base_price *= 0.9  # 애매한 구축 감가 (-10%)
             
-        return data_list
+        # 3. 층수 프리미엄 (고층일수록 비쌈)
+        if floor >= 20:
+            base_price += (floor * 300) # 고층 프리미엄
+        elif floor <= 3:
+            base_price -= 5000 # 저층 감가
         
-    except Exception as e:
-        print(f"[오류] {deal_ym} 데이터 수집 실패: {e}")
-        return []
-
-def main():
-    print(f"--- 실제 데이터 수집 시작 (지역코드: {LAWD_CD}) ---")
-    all_data = []
-
-    for ym in DEAL_YMS:
-        print(f" > {ym} 기간 데이터 요청 중...", end=" ")
-        monthly_data = fetch_data(ym)
-        print(f"성공 ({len(monthly_data)}건)")
-        all_data.extend(monthly_data)
-        time.sleep(1) # 서버 부하 방지용 대기
-
-    if not all_data:
-        print("[경고] 수집된 데이터가 없습니다. 네트워크 상태나 API 키를 확인해주세요.")
-        return
-
-    # 데이터프레임 생성
-    df = pd.DataFrame(all_data)
-    
-    # 저장
-    df.to_csv(OUTPUT_FILE, index=False, encoding='utf-8-sig')
-    print(f"\n[완료] 총 {len(df)}건의 실제 데이터를 '{OUTPUT_FILE}'로 저장했습니다.")
-    print(f"저장 위치: {os.path.abspath(OUTPUT_FILE)}")
-    
-    # 데이터 미리보기
-    print("\n--- 수집된 데이터 샘플 ---")
-    print(df[['단지명', '보증금액', '월세금', '전용면적', '층']].head())
+        # 4. 랜덤 변동성 추가 (+- 1~2억원 차이)
+        final_price = base_price + random.randint(-15000, 15000)
+        
+        # 최소 가격 방어 (10억 미만은 거의 없다고 가정)
+        if final_price < 100000: final_price = 100000
+        
+        # 100만원 단위 절삭
+        final_price = int(final_price / 100) * 100
+        
+        # 데이터 적재
+        row = {
+            '아파트': apt_name,
+            '법정동': dong,
+            '거래금액': f'{final_price:,}', # 콤마가 포함된 문자열 (API 원본 형태)
+            '건축년도': build_year,
+            '전용면적': round(area, 2),
+            '층': floor,
+            '년': 2024,
+            '월': random.randint(1, 12),
+            '일': random.randint(1, 28)
+        }
+        data.append(row)
+        
+    return pd.DataFrame(data)
 
 if __name__ == "__main__":
-    main()
+    # 데이터 생성
+    df = create_realistic_sales_data(NUM_ROWS)
+    
+    # CSV 저장
+    df.to_csv(OUTPUT_FILENAME, index=False, encoding='utf-8-sig')
+    
+    print(f"--- [매매] 가상 데이터 생성 완료 ---")
+    print(f"생성된 데이터 수: {len(df)}건")
+    print(f"저장 파일명: {OUTPUT_FILENAME}")
+    print("\n[데이터 미리보기]")
+    print(df.head())
